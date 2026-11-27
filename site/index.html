@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EORI VAT Verificator</title>
+<style>
+:root{--page:#f3f5f8;--card:#fff;--well:#f1f4f8;--accent:#005a9e;--accent-h:#006ebe;--text:#2d3a4a;--muted:#6b7b8c;--line:#e2e6ec;
+--okbg:#dcf5e4;--okfg:#16783c;--okbar:#2ea05a;--badbg:#fde4e4;--badfg:#b02020;--badbar:#d94040;
+--warnbg:#fff1d6;--warnfg:#8a5a00;--warnbar:#e8a317;--neubg:#e8ebf0;--neufg:#5a6473;--neubar:#a0a8b4}
+@media (prefers-color-scheme:dark){:root{--page:#12171e;--card:#1b232d;--well:#232d39;--text:#e4e9f0;--muted:#93a1b2;--line:#2c3744;--okbg:#17382a;--okfg:#7fdca0;--badbg:#44201f;--badfg:#ff9d9d;--warnbg:#41330f;--warnfg:#ffcf6b;--neubg:#2a3441;--neufg:#aab5c3}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--text);font:14px/1.4 "Segoe UI",system-ui,Arial,sans-serif}
+header{background:var(--accent);color:#fff;padding:14px 20px;font-size:18px;font-weight:600;box-shadow:0 2px 4px rgba(0,0,0,.15)}
+header.top{display:flex;align-items:center;gap:10px}
+.logo{flex:none}
+main{max-width:900px;margin:0 auto;padding:20px 16px}
+.search{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+.search #go{grid-column:1/-1;width:100%}
+.search #clear{grid-column:1/-1;width:100%}
+button.secondary{background:var(--well);color:var(--text);border:1px solid var(--line)}
+button.secondary:hover{background:var(--line)}
+@media(max-width:640px){.search{grid-template-columns:1fr}}
+label,.lbl{display:block;font-size:11px;font-weight:700;letter-spacing:.04em;color:var(--muted);margin-bottom:4px}
+input{width:100%;height:40px;padding:0 10px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--text);font:inherit}
+input:focus,.val:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+button{height:40px;padding:0 22px;border:0;border-radius:6px;background:var(--accent);color:#fff;font:600 14px "Segoe UI",system-ui,sans-serif;cursor:pointer}
+button:hover{background:var(--accent-h)}button:disabled{opacity:.6;cursor:wait}
+.cards{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px}
+@media(max-width:640px){.cards{grid-template-columns:1fr}}
+.card{position:relative;background:var(--card);border-radius:8px;padding:14px 14px 16px;box-shadow:0 2px 6px rgba(0,0,0,.1);overflow:hidden}
+.strip{position:absolute;left:0;top:0;right:0;height:3px;background:var(--neubar)}
+.card h2{margin:6px 0 10px;font-size:12px;letter-spacing:.04em}
+.badge{padding:4px 8px;border-radius:4px;font-size:12px;font-weight:700;text-align:center;background:var(--neubg);color:var(--neufg);margin-bottom:14px}
+.ok .strip{background:var(--okbar)}.ok .badge{background:var(--okbg);color:var(--okfg)}
+.bad .strip{background:var(--badbar)}.bad .badge{background:var(--badbg);color:var(--badfg)}
+.warn .strip{background:var(--warnbar)}.warn .badge{background:var(--warnbg);color:var(--warnfg)}
+.field{margin-bottom:12px}
+.val{display:block;width:100%;height:auto;text-align:left;min-height:30px;padding:6px 8px;background:var(--well);color:var(--text);border-radius:4px;white-space:pre-wrap;word-break:break-word;cursor:copy;font:13px/1.4 "Segoe UI",system-ui,sans-serif;font-weight:400}
+.val:hover{background:var(--well)}
+.val.num{font-weight:700;font-size:15px}
+.copied::after{content:"  COPIED";color:var(--okfg)}
+.hint{margin:-6px 0 12px;font-size:12px;color:var(--warnfg)}
+footer{margin-top:12px;font-size:12px;color:var(--muted)}
+.source{margin-top:4px;font-size:12px;color:var(--muted)}
+.source a{color:inherit;text-decoration:underline}
+.source a:hover{color:var(--accent)}
+
+/* Draggable and resizable verification panel */
+.panel-floatable{
+  position:fixed;
+  z-index:100;
+  top:140px;
+  left:50%;
+  transform:translateX(-50%);
+  width:min(900px,calc(100vw - 32px));
+  height:572px;
+  min-width:480px;
+  min-height:220px;
+  max-width:calc(100vw - 16px);
+  max-height:calc(100vh - 16px);
+  display:flex;
+  flex-direction:column;
+  background:var(--page);
+  border:1px solid var(--line);
+  border-radius:10px;
+  box-shadow:0 12px 36px rgba(0,0,0,.28);
+  overflow:hidden;
+  resize:both;
+}
+.panel-titlebar{
+  flex:none;
+  height:42px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:0 14px;
+  background:var(--accent);
+  color:#fff;
+  font-weight:600;
+  cursor:grab;
+  touch-action:none;
+  user-select:none;
+}
+.panel-titlebar:active{cursor:grabbing}
+.panel-titlebar:focus-visible{outline:2px solid #fff;outline-offset:-4px}
+.drag-dots{
+  display:grid;
+  grid-template-columns:repeat(3,3px);
+  grid-template-rows:repeat(2,3px);
+  gap:2px;
+  padding:3px;
+  opacity:.9;
+}
+.drag-dots span{
+  width:3px;
+  height:3px;
+  border-radius:50%;
+  background:#fff;
+}
+.panel-content{
+  min-height:0;
+  flex:1;
+  overflow:auto;
+  padding:14px;
+  display:flex;
+  flex-direction:column;
+  gap:14px;
+}
+.panel-content .search{
+  flex:none;
+  margin:0;
+}
+.panel-content .cards{
+  flex:1;
+  min-height:0;
+  align-items:stretch;
+}
+.panel-content .card{
+  min-height:0;
+  overflow:auto;
+}
+.panel-content footer{
+  flex:none;
+  margin:0;
+  padding:2px 1px 0;
+}
+@media(max-width:640px){
+  .panel-floatable{
+    position:static;
+    width:auto;
+    height:auto;
+    min-width:0;
+    min-height:0;
+    max-width:none;
+    max-height:none;
+    resize:none;
+    transform:none;
+    margin-top:14px;
+    border:0;
+    border-radius:0;
+    box-shadow:none;
+  }
+  .panel-titlebar{display:none}
+  .panel-content{overflow:visible;padding:0}
+  .panel-content .search{margin-bottom:14px}
+  .panel-content .cards{flex:none}
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <!-- LOGO SLOT: replace the <svg> below with <img src="your-logo.png" alt="Bellereaux" height="28"> -->
+  <svg class="logo" viewBox="0 0 24 24" width="28" height="28" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 2.8 4.5 5.8v5.5c0 4.6 3.1 8.2 7.5 9.9 4.4-1.7 7.5-5.3 7.5-9.9V5.8L12 2.8Zm-3.2 9.2 2.4 2.4 4.2-4.6"/></svg>
+  <span>EORI VAT Verificator</span>
+</header>
+<main>
+  <section class="panel-floatable" id="floatingPanel" aria-label="EORI and VAT verification panel">
+    <div class="panel-titlebar" id="panelHandle" tabindex="0" aria-label="Drag to move the verification panel">
+      <span>Verification</span>
+      <span class="drag-dots" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span></span>
+    </div>
+    <div class="panel-content">
+      <div class="search">
+        <div><label for="eori">EORI NUMBER</label><input id="eori" placeholder="e.g. FR12345678901234" autocomplete="off" spellcheck="false"></div>
+        <div><label for="vat">VAT NUMBER</label><input id="vat" placeholder="e.g. FR12345678901" autocomplete="off" spellcheck="false"></div>
+        <button id="go">Check</button>
+        <button id="clear" type="button" class="secondary">Clear</button>
+      </div>
+      <div class="cards">
+        <section class="card" id="cardEori" aria-labelledby="hEori"><div class="strip"></div><h2 id="hEori">EORI</h2><div class="badge" id="bEori" role="status" aria-live="polite">N/A</div>
+          <div class="hint" id="hintEori" hidden></div>
+          <div class="field"><span class="lbl">NUMBER</span><button type="button" class="val num" id="nEori" title="Click to copy"></button></div>
+          <div class="field"><span class="lbl">NAME</span><button type="button" class="val" id="nmEori" title="Click to copy"></button></div>
+          <div class="field"><span class="lbl">ADDRESS</span><button type="button" class="val" id="adEori" title="Click to copy"></button></div>
+          <div class="source"><a href="https://ec.europa.eu/taxation_customs/dds2/eos/eori_validation.jsp?Lang=fr" target="_blank" rel="noopener">European Commission – EOS EORI validation</a></div>
+        </section>
+        <section class="card" id="cardVat" aria-labelledby="hVat"><div class="strip"></div><h2 id="hVat">VAT</h2><div class="badge" id="bVat" role="status" aria-live="polite">N/A</div>
+          <div class="hint" id="hintVat" hidden></div>
+          <div class="field"><span class="lbl">NUMBER</span><button type="button" class="val num" id="nVat" title="Click to copy"></button></div>
+          <div class="field"><span class="lbl">NAME</span><button type="button" class="val" id="nmVat" title="Click to copy"></button></div>
+          <div class="field"><span class="lbl">ADDRESS</span><button type="button" class="val" id="adVat" title="Click to copy"></button></div>
+          <div class="source"><a href="https://ec.europa.eu/taxation_customs/vies/#/vat-validation" target="_blank" rel="noopener">European Commission – VIES VAT number validation</a></div>
+        </section>
+      </div>
+      <footer id="checked"></footer>
+    </div>
+  </section>
+</main>
+<script>
+// ===== CONFIG =====
+const RELAY = "https://script.google.com/macros/s/AKfycbyqpdnRYw_s5KGCFwrvcCOm9odAULSbOIuiQ5lKD6BXMp2w6jlMiQ2Vktc0Y9u3KUadtA/exec";
+const TIMEOUT_MS = 20000;
+const MAX_TRIES = 3;
+const RETRY_WAIT = 1500;
+
+const $ = id => document.getElementById(id);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const clean = s => (s || "").replace(/[\s.\-_]/g, "").toUpperCase();
+
+const TRANSIENT = /MS_UNAVAILABLE|TIMEOUT|MAX_CONCURRENT|SERVICE_UNAVAILABLE|HTTP_ERROR\s*5|IO_ERROR|FAILED TO FETCH|NETWORKERROR|ABORT|LOAD FAILED/i;
+const EXPLAIN = {
+  MS_UNAVAILABLE: "The member state's VAT database is not answering. Try again later.",
+  TIMEOUT: "The member state did not answer in time. Try again later.",
+  MS_MAX_CONCURRENT_REQ: "Too many requests to this member state right now. Try again later.",
+  GLOBAL_MAX_CONCURRENT_REQ: "VIES is overloaded right now. Try again later.",
+  SERVICE_UNAVAILABLE: "VIES is temporarily unavailable. Try again later.",
+  IP_BLOCKED: "VIES has blocked the relay's IP address (shared Google IP). Not a verdict on the number.",
+  VAT_BLOCKED: "This VAT number is blocked by a VIES filter. Not a verdict on its validity.",
+  INVALID_INPUT: "VIES rejected the input format (country code or number).",
+  IO_ERROR: "VIES had an internal error. Try again later."
+};
+const COUNTRIES = "AT BE BG CY CZ DE DK EE EL ES FI FR HR HU IE IT LT LU LV MT NL PL PT RO SE SI SK XI".split(" ");
+
+function paint(kind, state, text, num, name, addr, hint) {
+  const card = $("card" + kind);
+  card.classList.remove("ok", "bad", "warn");
+  if (state) card.classList.add(state);
+  $("b" + kind).textContent = "●  " + text;
+  $("n" + kind).textContent = num || "";
+  $("nm" + kind).textContent = name || "";
+  $("ad" + kind).textContent = addr || "";
+  const h = $("hint" + kind);
+  h.textContent = hint || "";
+  h.hidden = !hint;
+}
+const blank = v => !v || /^[-\s]*$/.test(v) ? "" : v;
+
+async function call(type, id) {
+  const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), TIMEOUT_MS);
+  try {
+    const r = await fetch(RELAY + "?type=" + type + "&id=" + encodeURIComponent(id), { signal: ctl.signal });
+    if (!r.ok) throw new Error("HTTP_ERROR " + r.status);
+    const d = await r.json();
+    if (d.error) throw new Error(String(d.error));
+    return d;
+  } catch (e) {
+    if (e.name === "AbortError") throw new Error("TIMEOUT (no answer in " + TIMEOUT_MS / 1000 + "s)");
+    throw e;
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+function embeddedCode(d) {
+  const c = String(d.userError || d.errorCode || d.errorMessage || d.faultstring || "").toUpperCase();
+  if (!c || c === "VALID" || c === "INVALID") return "";
+  return c;
+}
+
+async function resilient(kind, type, id) {
+  let last = "";
+  for (let i = 1; i <= MAX_TRIES; i++) {
+    try {
+      const d = await call(type, id);
+      const code = embeddedCode(d);
+      if (!code) return { d };
+      last = code;
+      if (!TRANSIENT.test(code)) return { code };
+    } catch (e) {
+      last = e.message;
+      if (!TRANSIENT.test(last)) throw e;
+    }
+    if (i < MAX_TRIES) {
+      $("b" + kind).textContent = "●  RETRY " + (i + 1) + "/" + MAX_TRIES + "...";
+      await sleep(RETRY_WAIT * i);
+    }
+  }
+  return { code: last };
+}
+
+function unavailable(kind, num, code) {
+  const key = Object.keys(EXPLAIN).find(k => code.toUpperCase().includes(k));
+  paint(kind, "warn", "UNAVAILABLE - RETRY", num, "", "", (key ? EXPLAIN[key] : "The EU service did not give a usable answer: " + code) + " (" + code + ")");
+}
+
+async function checkVat(raw) {
+  let v = clean(raw), hint = "";
+  if (!v) return paint("Vat", "", "N/A");
+  if (v.startsWith("GR")) { v = "EL" + v.slice(2); hint = "Greece uses the prefix EL in VIES; GR was converted."; }
+  const cc = v.slice(0, 2), body = v.slice(2);
+  if (!/^[A-Z]{2}/.test(v) || !COUNTRIES.includes(cc))
+    return paint("Vat", "bad", "INVALID FORMAT", v, "", "", "Unknown EU country prefix: " + cc + ". Use e.g. FR, DE, EL, XI (Northern Ireland).");
+  if (!/^[0-9A-Z+*]{2,12}$/.test(body))
+    return paint("Vat", "bad", "INVALID FORMAT", v, "", "", "After the country code: 2-12 letters/digits.");
+  try {
+    const { d, code } = await resilient("Vat", "vat", v);
+    if (code) return unavailable("Vat", v, code);
+    const addr = blank((d.address || "").replace(/\\n/g, "\n")), name = blank(d.name);
+    if (d.valid === true) paint("Vat", "ok", "VALID", v, name, addr, hint);
+    else if (d.valid === false) paint("Vat", "bad", "INVALID", v, name, addr, hint);
+    else paint("Vat", "warn", "UNKNOWN", v, name, blank(d.message) || addr, hint);
+  } catch (e) {
+    unavailable("Vat", v, e.message);
+  }
+}
+
+async function checkEori(raw) {
+  const e = clean(raw);
+  if (!e) return paint("Eori", "", "N/A");
+  if (!/^[A-Z]{2}[A-Z0-9]{1,15}$/.test(e))
+    return paint("Eori", "bad", "INVALID FORMAT", e, "", "", "An EORI is 2 letters followed by up to 15 letters/digits.");
+  try {
+    const { d, code } = await resilient("Eori", "eori", e);
+    if (code) return unavailable("Eori", e, code);
+    const addr = [blank(d.street), [blank(d.pc), blank(d.city)].join(" ").trim(), blank(d.country)].filter(Boolean).join("\n");
+    const name = blank(d.name);
+    if (d.status === "0" || d.status === 0) paint("Eori", "ok", "VALID", e, name, addr);
+    else if (d.status === "1" || d.status === 1) paint("Eori", "bad", "INVALID", e, name, addr);
+    else paint("Eori", "warn", (d.statusDescr || "UNKNOWN").toUpperCase().slice(0, 20), e, name, addr || d.statusDescr);
+  } catch (err) {
+    unavailable("Eori", e, err.message);
+  }
+}
+
+let busy = false;
+async function run() {
+  if (busy) return;
+  busy = true;
+  const btn = $("go");
+  btn.disabled = true;
+  btn.textContent = "Checking...";
+  try {
+    await Promise.all([checkEori($("eori").value), checkVat($("vat").value)]);
+    $("checked").textContent = "Checked " + new Date().toLocaleString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit"
+    });
+  } finally {
+    busy = false;
+    btn.disabled = false;
+    btn.textContent = "Check";
+  }
+}
+
+$("go").addEventListener("click", run);
+$("clear").addEventListener("click", () => {
+  $("eori").value = "";
+  $("vat").value = "";
+  paint("Eori", "", "N/A");
+  paint("Vat", "", "N/A");
+  $("checked").textContent = "";
+  $("eori").focus();
+});
+["eori", "vat"].forEach(id => $(id).addEventListener("keydown", e => { if (e.key === "Enter") run(); }));
+["eori", "vat"].forEach(id => $(id).addEventListener("paste", () => setTimeout(() => { $(id).value = clean($(id).value); }, 0)));
+
+async function copy(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (e) {
+    const t = document.createElement("textarea");
+    t.value = text;
+    document.body.appendChild(t);
+    t.select();
+    document.execCommand("copy");
+    t.remove();
+  }
+}
+function flash(el) {
+  document.querySelectorAll(".copied").forEach(x => x.classList.remove("copied"));
+  el.classList.add("copied");
+  setTimeout(() => el.classList.remove("copied"), 1500);
+}
+document.querySelectorAll(".val").forEach(el => el.addEventListener("click", async () => {
+  if (!el.textContent) return;
+  await copy(el.textContent);
+  flash(el);
+}));
+
+// Drag the complete panel using its title bar.
+const panel = $("floatingPanel");
+const handle = $("panelHandle");
+let drag = null;
+
+function clampPanel() {
+  if (window.innerWidth <= 640) return;
+  const rect = panel.getBoundingClientRect();
+  const left = Math.min(Math.max(0, rect.left), Math.max(0, window.innerWidth - rect.width));
+  const top = Math.min(Math.max(0, rect.top), Math.max(0, window.innerHeight - rect.height));
+  panel.style.left = left + "px";
+  panel.style.top = top + "px";
+  panel.style.transform = "none";
+}
+
+handle.addEventListener("pointerdown", e => {
+  if (window.innerWidth <= 640 || e.button !== 0) return;
+  const rect = panel.getBoundingClientRect();
+  panel.style.left = rect.left + "px";
+  panel.style.top = rect.top + "px";
+  panel.style.transform = "none";
+  drag = {
+    id: e.pointerId,
+    x: e.clientX,
+    y: e.clientY,
+    left: rect.left,
+    top: rect.top
+  };
+  handle.setPointerCapture(e.pointerId);
+  e.preventDefault();
+});
+
+handle.addEventListener("pointermove", e => {
+  if (!drag || drag.id !== e.pointerId) return;
+  const left = drag.left + e.clientX - drag.x;
+  const top = drag.top + e.clientY - drag.y;
+  const maxLeft = Math.max(0, window.innerWidth - panel.offsetWidth);
+  const maxTop = Math.max(0, window.innerHeight - panel.offsetHeight);
+  panel.style.left = Math.min(Math.max(0, left), maxLeft) + "px";
+  panel.style.top = Math.min(Math.max(0, top), maxTop) + "px";
+});
+
+function stopDrag(e) {
+  if (drag && drag.id === e.pointerId) drag = null;
+}
+handle.addEventListener("pointerup", stopDrag);
+handle.addEventListener("pointercancel", stopDrag);
+
+handle.addEventListener("keydown", e => {
+  if (window.innerWidth <= 640) return;
+  const rect = panel.getBoundingClientRect();
+  const step = e.shiftKey ? 30 : 10;
+  let left = rect.left, top = rect.top;
+  if (e.key === "ArrowLeft") left -= step;
+  else if (e.key === "ArrowRight") left += step;
+  else if (e.key === "ArrowUp") top -= step;
+  else if (e.key === "ArrowDown") top += step;
+  else return;
+  panel.style.left = left + "px";
+  panel.style.top = top + "px";
+  panel.style.transform = "none";
+  clampPanel();
+  e.preventDefault();
+});
+
+window.addEventListener("resize", () => {
+  if (window.innerWidth <= 640) {
+    panel.style.left = "";
+    panel.style.top = "";
+    panel.style.width = "";
+    panel.style.height = "";
+    panel.style.transform = "";
+  } else {
+    clampPanel();
+  }
+});
+</script>
+<!-- =================== PDF TOOLS PANEL : START =================== -->
+<style>
+.pdf-toggle{margin-left:auto;height:32px;padding:0 14px;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.4)}
+.pdf-toggle:hover{background:rgba(255,255,255,.28)}
+#pdfPanel{top:90px;left:auto;right:16px;transform:none;width:460px;min-width:340px;height:600px;min-height:300px;z-index:101}
+#pdfPanel[hidden]{display:none}
+.panel-close{height:28px;padding:0 10px;background:transparent;font-size:16px}
+.panel-close:hover{background:rgba(255,255,255,.2)}
+.tool-tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;flex:none}
+.tool-tabs button{height:auto;min-height:48px;padding:6px 4px;font-size:12px;background:var(--card);color:var(--text);border:1px solid var(--line)}
+.tool-tabs button:hover{background:var(--well)}
+.tool-tabs button[aria-pressed="true"]{background:var(--accent);color:#fff;border-color:var(--accent)}
+.tool-tabs button:disabled{opacity:.5;cursor:not-allowed}
+.tool-tabs small{display:block;font-weight:400;font-size:10px}
+.dropzone{flex:none;border:2px dashed var(--neubar);border-radius:8px;background:var(--card);padding:20px 12px;text-align:center;cursor:pointer}
+.dropzone:hover,.dropzone:focus-visible,.dropzone.over{border-color:var(--accent);background:var(--well)}
+.dropzone strong{display:block;margin-bottom:4px}
+.dropzone span{font-size:12px;color:var(--muted)}
+.split-options{display:grid;grid-template-columns:1fr 1fr;gap:8px;flex:none}
+.split-options[hidden]{display:none}
+.split-options input{height:36px}
+.split-options p{grid-column:1/-1;margin:0}
+.file-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.file-list li{display:flex;align-items:center;gap:8px;padding:8px;background:var(--card);border:1px solid var(--line);border-radius:6px;cursor:grab}
+.file-list li.dragging{opacity:.4}
+.file-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.file-size{flex:none;font-size:12px;color:var(--muted)}
+.file-list button{flex:none;height:28px;width:28px;padding:0;background:var(--well);color:var(--text);border:1px solid var(--line)}
+.file-list button:hover{background:var(--line)}
+.pdf-actions{display:flex;gap:8px;flex:none}
+.pdf-actions #pdfRun{flex:1}
+.pdf-status{margin:0;font-size:13px;color:var(--muted);flex:none}
+.pdf-status.ok{color:var(--okfg)}
+.pdf-status.bad{color:var(--badfg)}
+@media(max-width:640px){
+  #pdfPanel{width:auto;height:auto;min-width:0;min-height:0;margin:14px 16px}
+  #pdfPanel .panel-titlebar{display:flex;cursor:default;border-radius:8px}
+  #pdfPanel .panel-content{padding:12px 0}
+}
+</style>
+
+<section class="panel-floatable" id="pdfPanel" aria-label="PDF tools panel" hidden>
+  <div class="panel-titlebar" id="pdfHandle">
+    <span>PDF Tools</span>
+    <button type="button" class="panel-close" id="pdfClose" aria-label="Close PDF tools">&#10005;</button>
+  </div>
+  <div class="panel-content" id="pdfBody">
+    <div class="tool-tabs" id="toolTabs"></div>
+    <div class="dropzone" id="dropzone" role="button" tabindex="0">
+      <strong id="dropTitle"></strong>
+      <span id="dropHelp"></span>
+    </div>
+    <input type="file" id="pdfInput" hidden>
+    <div class="split-options" id="splitOptions" hidden>
+      <div><label for="splitStart">Start page</label><input id="splitStart" type="number" min="1" step="1" value="1" inputmode="numeric" disabled></div>
+      <div><label for="splitEnd">End page</label><input id="splitEnd" type="number" min="1" step="1" inputmode="numeric" disabled></div>
+      <p class="pdf-status" id="splitPageHint" aria-live="polite">Select a PDF to see its page count.</p>
+    </div>
+    <ul class="file-list" id="fileList"></ul>
+    <div class="pdf-actions">
+      <button type="button" id="pdfRun" disabled></button>
+      <button type="button" id="pdfReset" class="secondary">Clear</button>
+    </div>
+    <p class="pdf-status" id="pdfStatus" role="status" aria-live="polite"></p>
+    <p class="pdf-status">Your files stay on your computer: nothing is uploaded.</p>
+  </div>
+</section>
+
+<script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js" integrity="sha512-z8IYLHO8bTgFqj+yrPyIJnzBDf7DDhWwiEsk4sY+Oe6J2M+WQequeGS7qioI5vT6rXgVRb4K1UVQC5ER7MKzKQ==" crossorigin="anonymous"></script>
+<script>
+(() => {
+  const el = id => document.getElementById(id);
+  const panel = el("pdfPanel"), handle = el("pdfHandle"), zone = el("dropzone"), input = el("pdfInput");
+  const list = el("fileList"), runBtn = el("pdfRun"), statusLine = el("pdfStatus");
+  const splitStart = el("splitStart"), splitEnd = el("splitEnd");
+
+  // ===== TOOLS: each new tool is added here =====
+  const TOOLS = {
+    merge: {
+      label: "Merge PDF", ready: true, accept: [".pdf"], multiple: true, minFiles: 2,
+      title: "Drag & drop PDF files here",
+      help: "or click to choose. Add at least 2 files, then drag them into order.",
+      button: "Merge PDFs", run: mergePdfs
+    },
+    split: {
+      label: "Split PDF", ready: true, accept: [".pdf"], multiple: false, minFiles: 1,
+      title: "Choose one PDF to split",
+      help: "or click to choose. Enter the first and last page to include.",
+      button: "Split PDF", run: splitPdf
+    },
+    image: {
+      label: "Image to PDF", ready: true, accept: [".jpg", ".jpeg", ".png"], multiple: true, minFiles: 1,
+      title: "Drag & drop images here",
+      help: "or click to choose. Supported formats: JPG and PNG.",
+      button: "Create PDF", run: imagesToPdf
+    },
+    word:  { label: "Word to PDF", ready: false }
+  };
+
+  let current = "merge", files = [], working = false, dragIndex = null, splitPageCount = null, splitLoadId = 0;
+
+  function say(text, type) {
+    statusLine.textContent = text;
+    statusLine.className = "pdf-status" + (type ? " " + type : "");
+  }
+
+  function selectTool(key) {
+    current = key;
+    files = [];
+    const tool = TOOLS[key];
+    input.accept = tool.accept ? tool.accept.join(",") : "";
+    input.multiple = tool.multiple;
+    el("dropTitle").textContent = tool.title;
+    el("dropHelp").textContent = tool.help;
+    runBtn.textContent = tool.button;
+    document.querySelectorAll("#toolTabs button").forEach(b => b.setAttribute("aria-pressed", b.dataset.tool === key));
+    say("");
+    render();
+    refreshSplitPageCount();
+  }
+
+  Object.entries(TOOLS).forEach(([key, tool]) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.dataset.tool = key;
+    b.textContent = tool.label;
+    if (!tool.ready) {
+      b.disabled = true;
+      const s = document.createElement("small");
+      s.textContent = "coming soon";
+      b.appendChild(s);
+    }
+    b.addEventListener("click", () => { if (!working) selectTool(key); });
+    el("toolTabs").appendChild(b);
+  });
+
+  // ===== FILE LIST =====
+  const size = n => n < 1048576 ? Math.max(1, Math.round(n / 1024)) + " KB" : (n / 1048576).toFixed(1) + " MB";
+
+  function addFiles(incoming) {
+    if (working) return;
+    const tool = TOOLS[current];
+    const all = Array.from(incoming);
+    const good = all.filter(f => tool.accept.some(ext => f.name.toLowerCase().endsWith(ext)));
+    files = tool.multiple ? files.concat(good) : good.slice(0, 1);
+    const skipped = all.length - good.length;
+    const accepted = tool.accept.join(", ");
+    say(skipped ? skipped + " file(s) ignored: accepted formats are " + accepted + "." : "", skipped ? "bad" : "");
+    render();
+    if (current === "split") refreshSplitPageCount();
+  }
+
+  function move(from, to) {
+    if (working || to < 0 || to >= files.length || from === to) return;
+    files.splice(to, 0, files.splice(from, 1)[0]);
+    say("");
+    render();
+  }
+
+  function smallButton(text, label, action, disabled) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = text;
+    b.title = label;
+    b.setAttribute("aria-label", label);
+    b.disabled = disabled;
+    b.addEventListener("click", action);
+    return b;
+  }
+
+  function render() {
+    list.textContent = "";
+    files.forEach((file, i) => {
+      const li = document.createElement("li");
+      li.draggable = true;
+      const name = document.createElement("span");
+      name.className = "file-name";
+      name.textContent = (i + 1) + ". " + file.name;
+      name.title = file.name;
+      const info = document.createElement("span");
+      info.className = "file-size";
+      info.textContent = size(file.size);
+      li.append(name, info,
+        smallButton("↑", "Move up", () => move(i, i - 1), i === 0),
+        smallButton("↓", "Move down", () => move(i, i + 1), i === files.length - 1),
+        smallButton("✕", "Remove", () => {
+          if (!working) {
+            files.splice(i, 1);
+            say("");
+            render();
+            if (current === "split") refreshSplitPageCount();
+          }
+        }, false));
+      li.addEventListener("dragstart", e => {
+        dragIndex = i;
+        li.classList.add("dragging");
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", String(i));
+      });
+      li.addEventListener("dragend", () => { dragIndex = null; li.classList.remove("dragging"); });
+      li.addEventListener("dragover", e => { if (dragIndex !== null) e.preventDefault(); });
+      li.addEventListener("drop", e => {
+        if (dragIndex === null) return;
+        e.preventDefault();
+        move(dragIndex, i);
+        dragIndex = null;
+      });
+      list.appendChild(li);
+    });
+    updateSplitControls();
+    runBtn.disabled = working || files.length < TOOLS[current].minFiles || (current === "split" && !validSplitRange());
+  }
+
+  function validSplitRange() {
+    const first = splitStart.valueAsNumber, last = splitEnd.valueAsNumber;
+    return splitPageCount !== null && Number.isInteger(first) && Number.isInteger(last) &&
+      first >= 1 && first <= last && last <= splitPageCount;
+  }
+
+  function updateSplitControls() {
+    const visible = current === "split";
+    el("splitOptions").hidden = !visible;
+    const enabled = visible && files.length === 1 && splitPageCount !== null;
+    splitStart.disabled = splitEnd.disabled = !enabled;
+    if (splitPageCount !== null) {
+      splitStart.max = splitEnd.max = String(splitPageCount);
+    } else {
+      splitStart.removeAttribute("max");
+      splitEnd.removeAttribute("max");
+    }
+  }
+
+  async function refreshSplitPageCount() {
+    const loadId = ++splitLoadId;
+    splitPageCount = null;
+    splitStart.value = "1";
+    splitEnd.value = "";
+    el("splitPageHint").textContent = "Select a PDF to see its page count.";
+    updateSplitControls();
+    render();
+    if (current !== "split" || files.length !== 1) return;
+    if (!window.PDFLib) {
+      say("The PDF library did not load. Check your internet connection and reload the page.", "bad");
+      return;
+    }
+    el("splitPageHint").textContent = "Reading page count...";
+    try {
+      const source = await PDFLib.PDFDocument.load(await files[0].arrayBuffer());
+      if (loadId !== splitLoadId || current !== "split" || files.length !== 1) return;
+      splitPageCount = source.getPageCount();
+      splitEnd.value = String(splitPageCount);
+      el("splitPageHint").textContent = splitPageCount + " pages found. The selected range includes both pages.";
+    } catch {
+      if (loadId !== splitLoadId) return;
+      el("splitPageHint").textContent = "Could not read this PDF. It may be damaged or password-protected.";
+      say("Could not read \"" + files[0].name + "\". It may be damaged or password-protected.", "bad");
+    }
+    updateSplitControls();
+    render();
+  }
+
+  // ===== DRAG & DROP FROM THE COMPUTER =====
+  const hasFiles = e => e.dataTransfer && Array.from(e.dataTransfer.types).includes("Files");
+  // Stops the browser from opening a file dropped anywhere on the page
+  ["dragover", "drop"].forEach(type => window.addEventListener(type, e => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    if (type === "dragover" && !panel.contains(e.target)) e.dataTransfer.dropEffect = "none";
+  }));
+  panel.addEventListener("dragover", e => { if (hasFiles(e)) { e.dataTransfer.dropEffect = "copy"; zone.classList.add("over"); } });
+  panel.addEventListener("dragleave", e => { if (!panel.contains(e.relatedTarget)) zone.classList.remove("over"); });
+  panel.addEventListener("drop", e => {
+    zone.classList.remove("over");
+    if (hasFiles(e)) { e.preventDefault(); addFiles(e.dataTransfer.files); }
+  });
+
+  zone.addEventListener("click", () => input.click());
+  zone.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); input.click(); } });
+  input.addEventListener("change", () => { addFiles(input.files); input.value = ""; });
+  splitStart.addEventListener("input", render);
+  splitEnd.addEventListener("input", render);
+  el("pdfReset").addEventListener("click", () => {
+    if (!working) {
+      files = [];
+      say("");
+      render();
+      if (current === "split") refreshSplitPageCount();
+    }
+  });
+
+  // ===== MERGE =====
+  async function mergePdfs(selected) {
+    const { PDFDocument } = PDFLib;
+    const output = await PDFDocument.create();
+    for (const file of selected) {
+      try {
+        const source = await PDFDocument.load(await file.arrayBuffer());
+        const pages = await output.copyPages(source, source.getPageIndices());
+        pages.forEach(p => output.addPage(p));
+      } catch (e) {
+        const why = /encrypt/i.test(e.message) ? "it is password-protected or restricted." : "it is damaged or not a real PDF.";
+        throw new Error('Cannot read "' + file.name + '": ' + why);
+      }
+    }
+    return { bytes: await output.save(), name: "merged.pdf", info: output.getPageCount() + " pages" };
+  }
+
+  async function splitPdf(selected) {
+    const { PDFDocument } = PDFLib;
+    const first = splitStart.valueAsNumber, last = splitEnd.valueAsNumber;
+    let source;
+    try {
+      source = await PDFDocument.load(await selected[0].arrayBuffer());
+    } catch {
+      throw new Error('Cannot read "' + selected[0].name + '": it may be damaged or password-protected.');
+    }
+    const pageCount = source.getPageCount();
+    if (!Number.isInteger(first) || !Number.isInteger(last) || first < 1 || first > last || last > pageCount) {
+      throw new Error("Enter a page range from 1 to " + pageCount + ", with the start page no greater than the end page.");
+    }
+    const output = await PDFDocument.create();
+    const pages = await output.copyPages(source, Array.from({ length: last - first + 1 }, (_, i) => first - 1 + i));
+    pages.forEach(page => output.addPage(page));
+    const stem = selected[0].name.replace(/\.pdf$/i, "");
+    return {
+      bytes: await output.save(),
+      name: stem + "_pages_" + first + "-" + last + ".pdf",
+      info: output.getPageCount() + " pages"
+    };
+  }
+
+  async function imagesToPdf(selected) {
+    const { PDFDocument } = PDFLib;
+    const output = await PDFDocument.create();
+    const a4Portrait = [595.28, 841.89];
+    for (const file of selected) {
+      let image;
+      try {
+        const bytes = await file.arrayBuffer();
+        const extension = file.name.toLowerCase().match(/\.[^.]+$/)?.[0];
+        image = extension === ".png" ? await output.embedPng(bytes) : await output.embedJpg(bytes);
+      } catch {
+        throw new Error('Cannot read "' + file.name + '": use a valid JPG or PNG image.');
+      }
+      const [portraitWidth, portraitHeight] = a4Portrait;
+      const [pageWidth, pageHeight] = image.width > image.height
+        ? [portraitHeight, portraitWidth]
+        : a4Portrait;
+      const margin = 36;
+      const scale = Math.min((pageWidth - margin * 2) / image.width, (pageHeight - margin * 2) / image.height);
+      const width = image.width * scale, height = image.height * scale;
+      const page = output.addPage([pageWidth, pageHeight]);
+      page.drawImage(image, {
+        x: (pageWidth - width) / 2,
+        y: (pageHeight - height) / 2,
+        width,
+        height
+      });
+    }
+    return { bytes: await output.save(), name: "images.pdf", info: output.getPageCount() + " pages" };
+  }
+
+  function download(bytes, name) {
+    const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  }
+
+  runBtn.addEventListener("click", async () => {
+    if (working) return;
+    if (!window.PDFLib) return say("The PDF library did not load. Check your internet connection and reload the page.", "bad");
+    working = true;
+    render();
+    say("Working...");
+    try {
+      const result = await TOOLS[current].run(files.slice());
+      download(result.bytes, result.name);
+      say("Done: " + result.name + " (" + result.info + ") downloaded.", "ok");
+    } catch (e) {
+      say(e.message, "bad");
+    } finally {
+      working = false;
+      render();
+    }
+  });
+
+  // ===== OPEN / CLOSE / MOVE =====
+  const mobile = () => window.innerWidth <= 640;
+  const other = el("floatingPanel");
+  const toFront = front => { panel.style.zIndex = front === panel ? 101 : 100; other.style.zIndex = front === other ? 101 : 100; };
+  [panel, other].forEach(p => p.addEventListener("pointerdown", () => toFront(p)));
+
+  function place(left, top) {
+    const maxLeft = Math.max(0, window.innerWidth - panel.offsetWidth);
+    const maxTop = Math.max(0, window.innerHeight - panel.offsetHeight);
+    panel.style.left = Math.min(Math.max(0, left), maxLeft) + "px";
+    panel.style.top = Math.min(Math.max(0, top), maxTop) + "px";
+    panel.style.right = "auto";
+  }
+
+  const toggle = document.createElement("button");
+  toggle.type = "button";
+  toggle.className = "pdf-toggle";
+  toggle.textContent = "PDF Tools";
+  toggle.setAttribute("aria-expanded", "false");
+  document.querySelector("header.top").appendChild(toggle);
+
+  function show(open) {
+    panel.hidden = !open;
+    toggle.setAttribute("aria-expanded", String(open));
+    if (open) {
+      toFront(panel);
+      if (mobile()) panel.scrollIntoView({ behavior: "smooth" });
+      else if (panel.style.left) place(parseFloat(panel.style.left), parseFloat(panel.style.top));
+    }
+  }
+  toggle.addEventListener("click", () => show(panel.hidden));
+  el("pdfClose").addEventListener("click", () => show(false));
+
+  let drag = null;
+  handle.addEventListener("pointerdown", e => {
+    if (mobile() || e.button !== 0 || e.target.closest("button")) return;
+    const r = panel.getBoundingClientRect();
+    drag = { id: e.pointerId, dx: e.clientX - r.left, dy: e.clientY - r.top };
+    handle.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+  handle.addEventListener("pointermove", e => { if (drag && drag.id === e.pointerId) place(e.clientX - drag.dx, e.clientY - drag.dy); });
+  ["pointerup", "pointercancel"].forEach(t => handle.addEventListener(t, () => { drag = null; }));
+
+  window.addEventListener("resize", () => {
+    if (mobile()) ["left", "top", "right", "width", "height"].forEach(p => panel.style[p] = "");
+    else if (!panel.hidden && panel.style.left) place(parseFloat(panel.style.left), parseFloat(panel.style.top));
+  });
+
+  selectTool("merge");
+})();
+</script>
+<!-- =================== PDF TOOLS PANEL : END =================== -->
+</body>
+</html>
