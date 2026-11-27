@@ -474,6 +474,12 @@ window.addEventListener("resize", () => {
 .file-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
 .file-list li{display:flex;align-items:center;gap:8px;padding:8px;background:var(--card);border:1px solid var(--line);border-radius:6px;cursor:grab}
 .file-list li.dragging{opacity:.4}
+.file-preview{width:78px;height:104px;flex:none;display:flex;align-items:center;justify-content:center;overflow:hidden;border:1px solid var(--line);border-radius:4px;background:#fff}
+.file-preview canvas{display:block;max-width:100%;max-height:100%;object-fit:contain}
+.file-details{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.file-details .file-name{flex:none}
+.file-pages{font-size:11px;color:var(--muted)}
+.file-pages.loading{font-style:italic}
 .file-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .file-size{flex:none;font-size:12px;color:var(--muted)}
 .file-list button{flex:none;height:28px;width:28px;padding:0;background:var(--well);color:var(--text);border:1px solid var(--line)}
@@ -487,6 +493,9 @@ window.addEventListener("resize", () => {
   #pdfPanel{width:auto;height:auto;min-width:0;min-height:0;margin:14px 16px}
   #pdfPanel .panel-titlebar{display:flex;cursor:default;border-radius:8px}
   #pdfPanel .panel-content{padding:12px 0}
+  .file-list li{gap:6px;padding:6px}
+  .file-preview{width:62px;height:84px}
+  .file-list button{width:26px;height:26px}
 }
 </style>
 
@@ -518,12 +527,17 @@ window.addEventListener("resize", () => {
 </section>
 
 <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js" integrity="sha512-z8IYLHO8bTgFqj+yrPyIJnzBDf7DDhWwiEsk4sY+Oe6J2M+WQequeGS7qioI5vT6rXgVRb4K1UVQC5ER7MKzKQ==" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" crossorigin="anonymous"></script>
 <script>
 (() => {
   const el = id => document.getElementById(id);
   const panel = el("pdfPanel"), handle = el("pdfHandle"), zone = el("dropzone"), input = el("pdfInput");
   const list = el("fileList"), runBtn = el("pdfRun"), statusLine = el("pdfStatus");
   const splitStart = el("splitStart"), splitEnd = el("splitEnd");
+  const previewCache = new WeakMap();
+  if (window.pdfjsLib) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  }
 
   // ===== TOOLS: each new tool is added here =====
   const TOOLS = {
@@ -631,7 +645,26 @@ window.addEventListener("resize", () => {
       const info = document.createElement("span");
       info.className = "file-size";
       info.textContent = size(file.size);
-      li.append(name, info,
+      if (current === "merge") {
+        const previewBox = document.createElement("div");
+        previewBox.className = "file-preview";
+        const canvas = document.createElement("canvas");
+        canvas.width = 1;
+        canvas.height = 1;
+        canvas.setAttribute("aria-label", "First page preview of " + file.name);
+        const pages = document.createElement("span");
+        pages.className = "file-pages loading";
+        pages.textContent = "Loading preview...";
+        previewBox.appendChild(canvas);
+        const details = document.createElement("div");
+        details.className = "file-details";
+        details.append(name, pages);
+        li.append(previewBox, details, info);
+        renderPreview(file, canvas, pages);
+      } else {
+        li.append(name, info);
+      }
+      li.append(
         smallButton("↑", "Move up", () => move(i, i - 1), i === 0),
         smallButton("↓", "Move down", () => move(i, i + 1), i === files.length - 1),
         smallButton("✕", "Remove", () => {
@@ -660,6 +693,58 @@ window.addEventListener("resize", () => {
     });
     updateSplitControls();
     runBtn.disabled = working || files.length < TOOLS[current].minFiles || (current === "split" && !validSplitRange());
+  }
+
+  function renderPreview(file, canvas, label) {
+    let preview = previewCache.get(file);
+    if (!preview) {
+      preview = (async () => {
+        if (!window.pdfjsLib) throw new Error("Preview library did not load");
+        const loadingTask = pdfjsLib.getDocument({ data: await file.arrayBuffer() });
+        let documentProxy;
+        try {
+          documentProxy = await loadingTask.promise;
+          const page = await documentProxy.getPage(1);
+          const baseViewport = page.getViewport({ scale: 1 });
+          const outputScale = Math.min(window.devicePixelRatio || 1, 2);
+          const scale = Math.min(72 / baseViewport.width, 98 / baseViewport.height) * outputScale;
+          const viewport = page.getViewport({ scale });
+          const thumbnail = document.createElement("canvas");
+          thumbnail.width = Math.ceil(viewport.width);
+          thumbnail.height = Math.ceil(viewport.height);
+          await page.render({ canvasContext: thumbnail.getContext("2d"), viewport }).promise;
+          return {
+            image: thumbnail.toDataURL("image/png"),
+            width: thumbnail.width,
+            height: thumbnail.height,
+            pageCount: documentProxy.numPages
+          };
+        } finally {
+          if (documentProxy) await documentProxy.destroy();
+          else await loadingTask.destroy();
+        }
+      })();
+      previewCache.set(file, preview);
+    }
+
+    preview.then(result => {
+      if (!canvas.isConnected) return;
+      const image = new Image();
+      image.onload = () => {
+        if (!canvas.isConnected) return;
+        canvas.width = result.width;
+        canvas.height = result.height;
+        canvas.getContext("2d").drawImage(image, 0, 0);
+      };
+      image.onerror = () => { label.textContent = "Preview unavailable"; };
+      image.src = result.image;
+      label.classList.remove("loading");
+      label.textContent = result.pageCount + (result.pageCount === 1 ? " page" : " pages");
+    }).catch(() => {
+      if (!canvas.isConnected) return;
+      label.classList.remove("loading");
+      label.textContent = "Preview unavailable";
+    });
   }
 
   function validSplitRange() {
